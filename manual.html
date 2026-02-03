@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>LLM Code Smell Annotator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: auto;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    header {
+      padding: 12px 20px;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    header p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: #64748b;
+    }
+    header .right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .btn-ghost {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+      color: #0f172a;
+    }
+    .btn-ghost:hover {
+      background: #e2e8f0;
+    }
+    .btn-primary {
+      background: #0f172a;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #020617;
+    }
+
+     .layout {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .sidebar {
+      width: 260px;
+      background: white;
+      border-right: 1px solid #e2e8f0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-top {
+      padding: 12px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .sidebar-top h2 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .sidebar-top p {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .field-block {
+      margin-top: 8px;
+    }
+    .field-block label {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      margin-bottom: 3px;
+    }
+    .field-block input[type="file"],
+    .field-block select {
+      width: 100%;
+      font-size: 11px;
+    }
+    .sidebar-files {
+      flex: 1;
+      overflow: auto;
+      padding: 8px;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .file-item:hover {
+      background: #f1f5f9;
+    }
+    .file-item.selected {
+      background: #e0f2fe;
+      border-color: #38bdf8;
+    }
+    .file-item.validated {
+      background: #dcfce7;
+      border-color: #22c55e;
+    }
+    .file-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-badge {
+      font-size: 10px;
+      color: #16a34a;
+    }
+    .main {
+      flex: 1;
+      display: grid;
+      /* Default sizes: code panel takes the rest, resizer is 8px, smell panel starts at 350px */
+      grid-template-columns: 1fr 8px 350px;
+      border-left: 1px solid #e2e8f0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .resizer {
+      cursor: col-resize;
+      background: #e2e8f0;
+      transition: background 0.2s;
+      z-index: 10;
+    }
+    .resizer:hover, .resizer.dragging {
+      background: #94a3b8;
+    }
+    .code-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .code-header {
+      padding: 8px 12px;
+      background: white;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+    }
+    .code-header span.name {
+      background: #e2e8f0;
+      border-radius: 999px;
+      padding: 3px 8px;
+    }
+    .code-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: auto;
+      background: #020617;
+      min-height: 0;
+      position: relative;
+    }
+
+    .code-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: none;
+      background: white;
+    }
+
+    .smell-panel {
+      display: flex;
+      flex-direction: column;
+      background: white;
+      overflow: hidden;
+    }
+    .smell-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .smell-header h3 {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .smell-header p {
+      margin: 3px 0 0;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .progress-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .progress-card {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 6px 8px;
+      border: 1px solid #e2e8f0;
+      font-size: 10px;
+    }
+    .progress-card p {
+      margin: 0;
+    }
+    .progress-card .label {
+      color: #64748b;
+    }
+    .progress-card .value {
+      font-weight: 600;
+      margin-top: 2px;
+      color: #0f172a;
+    }
+    .smell-list {
+      flex: 1;
+      overflow: auto;
+      padding: 10px 12px;
+    }
+    .smell-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    .smell-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+    .smell-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .tag-red { background: #fee2e2; color: #b91c1c; }
+    .tag-orange { background: #ffedd5; color: #c2410c; }
+    .tag-yellow { background: #fef9c3; color: #854d0e; }
+    .tag-blue { background: #dbeafe; color: #1d4ed8; }
+    .tag-purple { background: #ede9fe; color: #6d28d9; }
+    .tag-green { background: #dcfce7; color: #538058; }
+    .tag-pink { background: #fce7f3; color: #987685; }
+    .tag-black { background: #d1d5db; color: #5f636c; }
+    .tag-cian { background: #cffafe; color: #227389; }
+    .smell-name {
+      margin-top: 3px;
+      font-weight: 500;
+    }
+    .smell-annotation-box {
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      padding: 4px 6px;
+      font-size: 11px;
+      color: #0f172a;
+    }
+    .smell-input {
+      width: 100%;
+      margin-top: 4px;
+      padding: 5px 6px;
+      border-radius: 6px;
+      border: 1px solid #cbd5f5;
+      font-size: 11px;
+    }
+    .remove-btn {
+      border: none;
+      background: transparent;
+      color: #b91c1c;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .smell-footer {
+      padding: 8px 12px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .smell-footer button {
+      width: 100%;
+      margin-bottom: 6px;
+    }
+    .status {
+      font-size: 11px;
+    }
+    .status.error {
+      color: #b91c1c;
+    }
+    .status.success {
+      color: #15803d;
+    }
+    .empty-state {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 13px;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+      width: 100%;
+    }
+    .smell-panel { min-height: 0 }
+    .smell-panel { overflow: hidden }
+
+    .smell-list { min-height: 0 }
+    .smell-list { overflow-y: auto }
+    .smell-list { overflow-x: hidden }
+
+    .main { min-height: 0 }
+    .layout { min-height: 0 }
+
+    /* Prevent iframe from eating mouse events during resize */
+    .dragging iframe {
+      pointer-events: none;
+    }
+
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div>
+      <h1>LLM Code Smell Annotator</h1>
+      <p id="repoInfo"></p>
+      <p id="fileInfo"></p>
+    </div>
+    <div class="right">
+      <button id="exportJson" class="btn btn-primary">Exporter JSON</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="sidebar">
+      <div class="sidebar-top">
+        <h2>Fichiers de données</h2>
+        <p id="repoCount">Chargement...</p>
+
+        <div class="field-block">
+          <label for="repoSelect">Dépôt</label>
+          <select id="repoSelect">
+            <option value="">Choisir un dépôt</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sidebar-files" id="filesList">
+        <p style="font-size:11px; color:#64748b">
+          Chargement des données...
+        </p>
+      </div>
+    </div>
+
+    <div class="main" id="mainContainer">
+      <div class="code-panel">
+        <div class="code-header">
+          <span class="name" id="fileNameBadge">Aucun fichier sélectionné</span>
+          <span id="lineCount"></span>
+        </div>
+
+        <div class="code-body" id="codeViewer">
+          <div id="codeEmpty" class="empty-state">
+            <div>Sélectionne un fichier pour afficher le code.</div>
+          </div>
+          <iframe
+            id="codeFrame"
+            class="code-frame"
+            title="Code navigator"
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </div>
+      </div>
+
+      <div class="resizer" id="resizer"></div>
+
+      <div class="smell-panel">
+        <div class="smell-header">
+          <h3>Annotations de code smells</h3>
+          <p>Saisis les lignes touchées par chaque smell, puis valide.</p>
+          <div class="progress-grid">
+            <div class="progress-card">
+              <p class="label">Fichiers validés</p>
+              <p class="value" id="statFiles">0</p>
+            </div>
+            <div class="progress-card">
+              <p class="label">Dépôts validés</p>
+              <p class="value" id="statRepos">0</p>
+            </div>
+            <div class="progress-card">
+              <p class="label">Annotations</p>
+              <p class="value" id="statSmells">0</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="smell-list" id="smellList">
+        </div>
+
+        <div class="smell-footer">
+          <button id="validateFile" class="btn btn-primary">Valider fichier</button>
+          <button id="validateRepo" class="btn btn-ghost">Valider dépôt et envoyer</button>
+          <div id="statusMsg" class="status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const SHEETS_WEBHOOK_URL = '' // Put sheets webhook url here
+  const JSON_FILE = './repo_summary.json'
+  const CSV_FILE = './merged_repos.csv'
+
+  const NAVIGATOR_APP_BASE_URL = 'https://sco-enilno-zzz.github.io/'
+
+  const CODE_SMELLS = [
+    { id: 'NSO', name: 'No Structured Output', tagClass: 'tag-red' },
+    { id: 'UMM', name: 'Unbounded Max Metrics', tagClass: 'tag-orange' },
+    { id: 'TNES', name: 'Temperature Not Explicitly Set', tagClass: 'tag-yellow' },
+    { id: 'NMVP', name: 'No Model Version Pinning', tagClass: 'tag-blue' },
+    { id: 'NSM', name: 'No System Message', tagClass: 'tag-purple' },
+    { id: 'RENES', name: 'Reasoning Effort Not Explicitly Set', tagClass: 'tag-pink' },
+    { id: 'RVP', name: 'Raw Vision Payload', tagClass: 'tag-green' },
+    { id: 'OSP', name: 'Overspecified Sampling Parameters', tagClass: 'tag-black' },
+    { id: 'AIC', name: 'Anonymous Inference Cal', tagClass: 'tag-cian' }
+  ]
+
+  let data = null
+  let repoMetadata = {}
+  let selectedRepo = null
+  let selectedFile = null
+  let fileContent = ''
+  let annotations = {}
+  let validatedFiles = new Set()
+  let validatedRepos = new Set()
+
+  const repoInfoEl = document.getElementById('repoInfo')
+  const fileInfoEl = document.getElementById('fileInfo')
+  const repoCountEl = document.getElementById('repoCount')
+  const repoSelectEl = document.getElementById('repoSelect')
+  const filesListEl = document.getElementById('filesList')
+  const fileNameBadgeEl = document.getElementById('fileNameBadge')
+  const lineCountEl = document.getElementById('lineCount')
+  const codeViewerEl = document.getElementById('codeViewer')
+  const codeFrameEl = document.getElementById('codeFrame')
+  const codeEmptyEl = document.getElementById('codeEmpty')
+  const smellListEl = document.getElementById('smellList')
+  const statFilesEl = document.getElementById('statFiles')
+  const statReposEl = document.getElementById('statRepos')
+  const statSmellsEl = document.getElementById('statSmells')
+  const statusMsgEl = document.getElementById('statusMsg')
+
+  // Resizing logic
+  const resizer = document.getElementById('resizer');
+  const mainContainer = document.getElementById('mainContainer');
+
+  resizer.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    document.body.classList.add('dragging');
+    resizer.classList.add('dragging');
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', () => {
+      document.body.classList.remove('dragging');
+      resizer.classList.remove('dragging');
+      document.removeEventListener('mousemove', handleMouseMove);
+    });
+  });
+
+  function handleMouseMove(e) {
+    const containerWidth = mainContainer.offsetWidth;
+    const offsetRight = containerWidth - (e.clientX - mainContainer.getBoundingClientRect().left);
+    const minWidth = 200;
+    const maxWidth = containerWidth * 0.8;
+
+    if (offsetRight > minWidth && offsetRight < maxWidth) {
+      mainContainer.style.gridTemplateColumns = `1fr 8px ${offsetRight}px`;
+    }
+  }
+
+  repoSelectEl.addEventListener('change', () => {
+    const key = repoSelectEl.value || null
+    selectedRepo = key
+    selectedFile = null
+    fileContent = ''
+    renderRepoInfo()
+    renderFilesList()
+    renderCode()
+    renderSmellPanel()
+  })
+
+  document.getElementById('exportJson').addEventListener('click', () => {
+    if (!data) return
+    const exportData = {
+      repositories: Object.keys(data).length,
+      validatedRepos: validatedRepos.size,
+      annotations,
+      validatedFiles: Array.from(validatedFiles)
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'llm-code-smell-analysis.json'
+    a.click()
+  })
+
+  document.getElementById('validateFile').addEventListener('click', () => {
+    commitPendingAnnotationsForCurrentFile()
+    const key = annotationKeyForCurrentFile()
+    if (!key) {
+      statusMsgEl.textContent = 'Aucun fichier sélectionné'
+      statusMsgEl.className = 'status error'
+      return
+    }
+    validatedFiles.add(key)
+    statusMsgEl.textContent = '✓ Fichier validé : ' + (selectedFile ? selectedFile.file_path.split('/').pop() : 'unknown')
+    statusMsgEl.className = 'status success'
+    renderFilesList()
+    renderStats()
+  })
+
+  document.getElementById('validateRepo').addEventListener('click', async () => {
+    if (!selectedRepo || !data) return
+    validatedRepos.add(selectedRepo)
+    renderStats()
+    await sendRepoToGoogleSheets(selectedRepo)
+  })
+
+  async function loadDataFiles() {
+    try {
+      console.log('Chargement de', JSON_FILE)
+      const jsonResp = await fetch(JSON_FILE)
+      console.log('Réponse JSON:', jsonResp.status, jsonResp.statusText)
+
+      if (!jsonResp.ok) {
+        throw new Error('HTTP ' + jsonResp.status + ' - ' + jsonResp.statusText)
+      }
+
+      const jsonText = await jsonResp.text()
+      console.log('Texte JSON (premiers 500 chars):', jsonText.substring(0, 500))
+
+      data = JSON.parse(jsonText)
+      console.log('JSON parsé, repos:', Object.keys(data).length)
+
+      try {
+        const csvResp = await fetch(CSV_FILE)
+        if (csvResp.ok) {
+          const csvText = await csvResp.text()
+          const lines = csvText.split('\n')
+          const metadata = {}
+          for (let i = 1; i < lines.length; i += 1) {
+            const line = lines[i]
+            if (!line || !line.trim()) continue
+            const values = line.split(',')
+            const owner = values[1]
+            const repo = values[2]
+            const commitSha = values[3]
+            const source = values[4]
+            if (owner && repo) {
+              const key = owner + '/' + repo
+              metadata[key] = {
+                owner,
+                repo,
+                commit_sha: commitSha,
+                source,
+                ref: commitSha || 'main'
+              }
+            }
+          }
+          repoMetadata = metadata
+          const updated = {}
+          Object.keys(data).forEach((repoKey) => {
+            const base = data[repoKey]
+            if (metadata[repoKey]) {
+              updated[repoKey] = Object.assign({}, base, metadata[repoKey])
+            } else {
+              updated[repoKey] = base
+            }
+          })
+          data = updated
+        }
+      } catch (e) {
+        console.warn('CSV optionnel non trouvé:', e.message)
+      }
+
+      const repoKeys = Object.keys(data)
+      console.log('Clés des repos:', repoKeys)
+
+      repoSelectEl.innerHTML = '<option value="">Choisir un dépôt</option>'
+      repoKeys.forEach((k) => {
+        const opt = document.createElement('option')
+        opt.value = k
+        opt.textContent = k
+        repoSelectEl.appendChild(opt)
+      })
+      repoCountEl.textContent = repoKeys.length + ' dépôts chargés'
+
+      if (repoKeys.length > 0) {
+        selectedRepo = repoKeys[0]
+        repoSelectEl.value = selectedRepo
+      }
+
+      renderRepoInfo()
+      renderFilesList()
+      renderCode()
+      renderSmellPanel()
+    } catch (err) {
+      console.error('Erreur complète:', err)
+      repoCountEl.textContent = 'Erreur: ' + err.message
+      codeViewerEl.innerHTML = '<div class="empty-state"><div>Erreur: ' + err.message + '<br><br>Vérifiez la console (F12) pour plus de détails</div></div>'
+    }
+  }
+
+  function annotationKeyForCurrentFile() {
+    if (!selectedRepo || !selectedFile) return null
+    return selectedRepo + ':' + selectedFile.file_path
+  }
+
+  function getCurrentAnnotations() {
+    const key = annotationKeyForCurrentFile()
+    if (!key) return {}
+    return annotations[key] || {}
+  }
+
+  function renderRepoInfo() {
+    if (!selectedRepo || !data) {
+      repoInfoEl.textContent = ''
+      return
+    }
+    const repoData = data[selectedRepo]
+    let text = selectedRepo
+    if (repoData && repoData.commit_sha) {
+      text += ' • ' + repoData.commit_sha.slice(0, 7)
+    }
+    if (repoData && repoData.source) {
+      text += ' • source: ' + repoData.source
+    }
+    repoInfoEl.textContent = text
+  }
+
+  function renderFileInfo() {
+    if (!selectedFile || !selectedRepo) {
+      fileInfoEl.textContent = ''
+      return
+    }
+    const repoData = data && data[selectedRepo]
+    const providerText = selectedFile.providers ? selectedFile.providers.join(', ') : ''
+    const src = repoData && repoData.source ? ' • source: ' + repoData.source : ''
+    fileInfoEl.textContent = selectedFile.file_path + ' • provider: ' + providerText + src
+  }
+
+  function getRepoCommitForNavigator(repoKey) {
+    const repoData = data && data[repoKey]
+    return (repoData && repoData.commit_sha) || (repoData && repoData.ref) || 'main'
+  }
+
+  function cleanRepoFilePath(filePath) {
+    let actualPath = filePath || ''
+    const firstSlashIdx = actualPath.indexOf('/')
+    if (firstSlashIdx !== -1) {
+      actualPath = actualPath.substring(firstSlashIdx + 1)
+    }
+    return actualPath
+  }
+
+  function buildNavigatorUrl(repoKey, file) {
+    const owner = repoKey.split('/')[0]
+    const repo = repoKey.split('/')[1]
+    const commit = getRepoCommitForNavigator(repoKey)
+    const path = cleanRepoFilePath(file.file_path)
+
+    const u = new URL(NAVIGATOR_APP_BASE_URL)
+    u.searchParams.set('repo', owner + '/' + repo)
+    u.searchParams.set('commit', commit)
+    u.searchParams.set('path', path)
+    return u.toString()
+  }
+
+  function renderCode() {
+    fileNameBadgeEl.textContent = selectedFile ? selectedFile.file_path.split('/').pop() : 'Aucun fichier sélectionné'
+    lineCountEl.textContent = ''
+
+    if (!selectedRepo || !selectedFile) {
+      codeFrameEl.src = 'about:blank'
+      codeFrameEl.style.display = 'none'
+      codeEmptyEl.style.display = 'flex'
+      return
+    }
+
+    const url = buildNavigatorUrl(selectedRepo, selectedFile)
+    codeEmptyEl.style.display = 'none'
+    codeFrameEl.style.display = 'block'
+    codeFrameEl.src = url
+  }
+
+  function renderFilesList() {
+    filesListEl.innerHTML = ''
+    if (!data || !selectedRepo) {
+      const p = document.createElement('p')
+      p.style.fontSize = '11px'
+      p.style.color = '#64748b'
+      p.textContent = 'Choisis un dépôt pour voir ses fichiers LLM.'
+      filesListEl.appendChild(p)
+      return
+    }
+    const repoData = data[selectedRepo]
+    const files = (repoData && repoData.files) || []
+    if (!files.length) {
+      const p = document.createElement('p')
+      p.style.fontSize = '11px'
+      p.style.color = '#64748b'
+      p.textContent = 'Aucun fichier LLM dans ce dépôt.'
+      filesListEl.appendChild(p)
+      return
+    }
+    files.forEach((f) => {
+      const key = selectedRepo + ':' + f.file_path
+      const div = document.createElement('div')
+      div.className = 'file-item'
+      if (selectedFile && selectedFile.file_path === f.file_path) {
+        div.classList.add('selected')
+      }
+      if (validatedFiles.has(key)) {
+        div.classList.add('validated')
+      }
+      const nameSpan = document.createElement('span')
+      nameSpan.className = 'file-name'
+      nameSpan.textContent = f.file_path.split('/').pop()
+      const badgeSpan = document.createElement('span')
+      badgeSpan.className = 'file-badge'
+      if (validatedFiles.has(key)) {
+        badgeSpan.textContent = '✓'
+      }
+      div.appendChild(nameSpan)
+      if (validatedFiles.has(key)) {
+        div.appendChild(badgeSpan)
+      }
+      div.addEventListener('click', () => {
+        selectFile(selectedRepo, f)
+      })
+      filesListEl.appendChild(div)
+    })
+  }
+
+  function selectFile(repoKey, file) {
+    selectedRepo = repoKey
+    selectedFile = file
+    fileContent = ''
+    renderRepoInfo()
+    renderFilesList()
+    renderSmellPanel()
+    loadFileContent(repoKey, file)
+  }
+
+  async function loadFileContent(repoKey, file) {
+    renderCode()
+  }
+
+  function renderStats() {
+    statFilesEl.textContent = validatedFiles.size
+    statReposEl.textContent = validatedRepos.size
+    let total = 0
+    Object.values(annotations).forEach((map) => {
+      total += Object.keys(map).length
+    })
+    statSmellsEl.textContent = total
+  }
+
+  function commitPendingAnnotationsForCurrentFile() {
+    const key = annotationKeyForCurrentFile()
+    if (!key) return
+
+    const inputs = smellListEl.querySelectorAll('input.smell-input[data-smell-id]')
+    inputs.forEach((input) => {
+      const smellId = input.dataset.smellId
+      const value = (input.value || '').trim()
+      if (!value) return
+      if (!annotations[key]) annotations[key] = {}
+      annotations[key][smellId] = value
+    })
+  }
+
+  function renderSmellPanel() {
+    smellListEl.innerHTML = ''
+    const current = getCurrentAnnotations()
+    CODE_SMELLS.forEach((smell) => {
+      const card = document.createElement('div')
+      card.className = 'smell-card'
+      const header = document.createElement('div')
+      header.className = 'smell-card-header'
+      const left = document.createElement('div')
+      const tag = document.createElement('span')
+      tag.className = 'smell-tag ' + smell.tagClass
+      tag.textContent = smell.id
+      const name = document.createElement('div')
+      name.className = 'smell-name'
+      name.textContent = smell.name
+      left.appendChild(tag)
+      left.appendChild(name)
+      header.appendChild(left)
+      const has = current[smell.id]
+      if (has) {
+        const btn = document.createElement('button')
+        btn.className = 'remove-btn'
+        btn.textContent = 'Retirer'
+        btn.addEventListener('click', () => {
+          removeAnnotation(smell)
+        })
+        header.appendChild(btn)
+      }
+      card.appendChild(header)
+      if (has) {
+        const box = document.createElement('div')
+        box.className = 'smell-annotation-box'
+        box.textContent = 'Lignes : ' + has
+        card.appendChild(box)
+      } else {
+        const input = document.createElement('input')
+        input.className = 'smell-input'
+        input.placeholder = 'Exemple: 5, 12, 17'
+        input.dataset.smellId = smell.id
+
+        input.addEventListener('blur', () => {
+          const value = input.value.trim()
+          if (value) addAnnotation(smell, value)
+        })
+
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const value = input.value.trim()
+            if (value) addAnnotation(smell, value)
+          }
+        })
+
+        card.appendChild(input)
+      }
+      smellListEl.appendChild(card)
+    })
+    renderStats()
+    renderFileInfo()
+  }
+
+  function addAnnotation(smell, value) {
+    const key = annotationKeyForCurrentFile()
+    if (!key) return
+    if (!annotations[key]) {
+      annotations[key] = {}
+    }
+    annotations[key][smell.id] = value
+    renderSmellPanel()
+  }
+
+  function removeAnnotation(smell) {
+    const key = annotationKeyForCurrentFile()
+    if (!key) return
+    if (!annotations[key]) return
+    delete annotations[key][smell.id]
+    if (Object.keys(annotations[key]).length === 0) {
+      delete annotations[key]
+    }
+    renderSmellPanel()
+  }
+
+  async function sendRepoToGoogleSheets(repoKey) {
+    statusMsgEl.textContent = ''
+    statusMsgEl.className = 'status'
+
+    if (!SHEETS_WEBHOOK_URL) {
+      statusMsgEl.textContent = 'Aucune URL Apps Script configurée.'
+      statusMsgEl.classList.add('error')
+      return
+    }
+
+    if (!data) return
+
+    const repoData = data[repoKey] || {}
+
+    const validatedForRepo = Array.from(validatedFiles).filter((k) =>
+      k.startsWith(repoKey + ':')
+    )
+
+    console.log("ANNOTATIONS DISPONIBLES :", Object.keys(annotations))
+
+    const rows = validatedForRepo.map((entry) => {
+      const filePath = entry.substring(repoKey.length + 1)
+
+      const row = {
+        file_path: filePath
+      }
+
+      CODE_SMELLS.forEach((smell) => {
+        const annKey = `${repoKey}:${filePath}`
+        row[smell.id] = annotations[annKey]?.[smell.id] || ''
+      })
+
+      return row
+    })
+
+    const payload = {
+      repo: repoData.repo,
+      owner: repoData.owner,
+      repo_key: repoKey,
+      commit_sha: repoData.commit_sha || repoData.ref,
+      timestamp: new Date().toISOString(),
+      rows: rows
+    }
+
+    try {
+      statusMsgEl.textContent = 'Envoi vers Google Sheets en cours...'
+      console.log("Payload envoyé :", JSON.stringify(payload, null, 2))
+      console.log("PAYLOAD ENVOYÉ →", JSON.stringify(payload, null, 2))
+
+      const resp = await fetch(SHEETS_WEBHOOK_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      })
+
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+
+      const result = await resp.json()
+      console.log('Réponse Google:', result)
+
+      statusMsgEl.textContent = '✓ Dépôt envoyé à Google Sheets'
+      statusMsgEl.className = 'status success'
+
+    } catch (err) {
+      console.error(err)
+      statusMsgEl.textContent = "✗ Erreur lors de l'envoi: " + err.message
+      statusMsgEl.className = 'status error'
+    }
+  }
+
+  loadDataFiles()
+</script>
+</body>
+</html>
